@@ -1,0 +1,56 @@
+# General
+.DS_Store
+.idea/
+.vscode/
+*.log
+*.swp
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+venv/
+env/
+ENV/
+.env
+.venv
+
+# Database
+*.db
+*.sqlite3
+*.sqlite
+
+# Application Specific - Backend
+web/server/uploads/
+web/server/goods.db
+web/server/debug_db.py
+
+# Application Specific - Frontend
+node_modules/
+web/client/dist/
+web/client/dist-ssr/
+*.local
+
+# OS
+Thumbs.db
