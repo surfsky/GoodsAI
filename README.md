@@ -39,19 +39,20 @@
 
 ### 1. 启动后端 (Server)
 
-建议使用 Python 虚拟环境。
+建议使用 Python 虚拟环境 (venv39)。
 
 ```bash
 cd web/server
 
-# 创建并激活虚拟环境 (macOS/Linux)
-python -m venv venv
-source venv/bin/activate
+# 1. 创建并激活虚拟环境
+python3 -m venv venv39
+source venv39/bin/activate
+# Windows: .\venv39\Scripts\activate
 
-# 安装依赖
+# 2. 安装依赖
 pip install -r requirements.txt
 
-# 启动服务 (默认端口 8000)
+# 3. 启动服务 (默认端口 8000)
 python main.py
 ```
 
@@ -68,6 +69,8 @@ npm install
 # 启动开发服务器 (默认端口 5173)
 npm run dev
 ```
+
+若需修改后端 API 地址，请编辑 `web/client/public/config.js`。
 
 ## 🔐 默认账号
 

@@ -29,13 +29,17 @@ app.add_middleware(
 )
 
 # Initialize
-os.makedirs("uploads", exist_ok=True)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+print(f"UPLOADS_DIR: {UPLOADS_DIR}")
+
 db = DBManager()
 # Lazy load model only when needed or at startup
 ai_model = FeatureExtractor()
 
 # Mount static files
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
 # ------------------------------------------------------
 # Security Configuration
@@ -280,8 +284,13 @@ async def reset_password(
     return {"status": "ok"}
 
 @app.get("/logs")
-async def get_logs(limit: int = 100, current_user: dict = Depends(get_current_admin)):
-    return db.get_logs(limit)
+async def get_logs(
+    limit: int = 20, 
+    offset: int = 0, 
+    search: Optional[str] = None, 
+    current_user: dict = Depends(get_current_admin)
+):
+    return db.get_logs(limit=limit, offset=offset, search=search)
 
 @app.delete("/logs")
 async def delete_logs(current_user: dict = Depends(get_current_admin)):
@@ -295,9 +304,13 @@ async def delete_logs(current_user: dict = Depends(get_current_admin)):
 # ------------------------------------------------------
 
 @app.get("/products")
-def get_products():
+def get_products(
+    limit: int = 20, 
+    offset: int = 0, 
+    search: Optional[str] = None
+):
     # Public access
-    return db.get_all_products()
+    return db.get_all_products(limit=limit, offset=offset, search=search)
 
 @app.get("/products/{pid}")
 def get_product_detail(pid: int):
@@ -322,7 +335,8 @@ async def create_product(
     count = 0
     for file in files:
         filename = f"{pid}_{datetime.now().timestamp()}_{file.filename}"
-        filepath = os.path.join("uploads", filename)
+        filepath = os.path.join(UPLOADS_DIR, filename)
+        db_path = os.path.join("uploads", filename)
         
         # Read file content
         content = await file.read()
@@ -332,7 +346,7 @@ async def create_product(
             # Extract features
             vector = ai_model.extract(filepath)
             if vector is not None:
-                db.add_product_image(pid, filepath, vector)
+                db.add_product_image(pid, db_path, vector)
                 count += 1
             else:
                 if os.path.exists(filepath):
@@ -411,15 +425,16 @@ def delete_image(image_id: int, current_user: dict = Depends(get_current_admin))
 @app.post("/products/{pid}/upload-image")
 async def upload_product_image(pid: int, file: UploadFile = File(...), current_user: dict = Depends(get_current_admin)):
     filename = f"{pid}_{datetime.now().timestamp()}_{file.filename}"
-    filepath = os.path.join("uploads", filename)
+    filepath = os.path.join(UPLOADS_DIR, filename)
+    db_path = os.path.join("uploads", filename)
     
     content = await file.read()
     if process_and_save_image(content, filepath):
         vector = ai_model.extract(filepath)
         if vector is not None:
-            new_id = db.add_product_image(pid, filepath, vector)
+            new_id = db.add_product_image(pid, db_path, vector)
             db.add_log(current_user["id"], current_user["username"], "UPLOAD_IMAGE", f"Added image to product ID: {pid}")
-            return {"status": "uploaded", "image_path": filepath, "id": new_id}
+            return {"status": "uploaded", "image_path": db_path, "id": new_id}
     
     if os.path.exists(filepath):
         os.remove(filepath)
@@ -431,7 +446,7 @@ async def recognize(file: UploadFile = File(...)):
     
     # Save temp file
     filename = f"temp_{datetime.now().timestamp()}_{file.filename}"
-    filepath = os.path.join("uploads", filename)
+    filepath = os.path.join(UPLOADS_DIR, filename)
     
     try:
         content = await file.read()
@@ -504,7 +519,7 @@ async def batch_update(file: UploadFile = File(...), current_user: dict = Depend
     
     # Create batch directory
     batch_dir_name = f"batch_{int(datetime.now().timestamp())}"
-    batch_dir_path = os.path.join("uploads", batch_dir_name)
+    batch_dir_path = os.path.join(UPLOADS_DIR, batch_dir_name)
     os.makedirs(batch_dir_path, exist_ok=True)
     
     # Track created products in this batch to avoid multiple lookups for same model in zip
@@ -581,6 +596,7 @@ async def batch_update(file: UploadFile = File(...), current_user: dict = Depend
             # Sanitize filename characters
             save_name = "".join([c for c in save_name if c.isalnum() or c in "._-"])
             save_path = os.path.join(batch_dir_path, save_name)
+            db_path = os.path.join("uploads", batch_dir_name, save_name)
             
             # Resize and Save
             if process_and_save_image(data, save_path):
@@ -613,7 +629,7 @@ async def batch_update(file: UploadFile = File(...), current_user: dict = Depend
                 
                 # Add Image to Product
                 if vector is not None:
-                    db.add_product_image(pid, save_path, vector)
+                    db.add_product_image(pid, db_path, vector)
                     updated_count += 1
 
     db.add_log(current_user["id"], current_user["username"], "BATCH_UPDATE", f"Processed {count} new products, {updated_count} images")

@@ -4,12 +4,12 @@ import axios from 'axios'
 import { Trash2, UserPlus, KeyRound, User } from 'lucide-vue-next'
 import { useToast } from '../composables/useToast'
 import { useMessageBox } from '../composables/useMessageBox'
+import { config } from '../config'
 
 const users = ref([])
 const loading = ref(false)
 const toast = useToast()
 const messageBox = useMessageBox()
-const API_URL = 'http://localhost:8000'
 
 const showAddModal = ref(false)
 const newUser = ref({
@@ -26,7 +26,7 @@ const getAuthHeader = () => {
 const fetchUsers = async () => {
   loading.value = true
   try {
-    const res = await axios.get(`${API_URL}/users`, { headers: getAuthHeader() })
+    const res = await axios.get(`${config.API_URL}/users`, { headers: getAuthHeader() })
     users.value = res.data
   } catch (err) {
     toast.error('获取用户列表失败')
@@ -40,7 +40,7 @@ const deleteUser = async (user) => {
   if (!confirmed) return
 
   try {
-    await axios.delete(`${API_URL}/users/${user.id}`, { headers: getAuthHeader() })
+    await axios.delete(`${config.API_URL}/users/${user.id}`, { headers: getAuthHeader() })
     toast.success('删除成功')
     fetchUsers()
   } catch (err) {
@@ -54,7 +54,7 @@ const resetPassword = async (user) => {
 
   try {
     await axios.post(
-      `${API_URL}/users/${user.id}/reset-password`, 
+      `${config.API_URL}/users/${user.id}/reset-password`, 
       { new_password: '123456' },
       { headers: getAuthHeader() }
     )
@@ -71,7 +71,7 @@ const addUser = async () => {
   }
 
   try {
-    await axios.post(`${API_URL}/users`, newUser.value, { headers: getAuthHeader() })
+    await axios.post(`${config.API_URL}/users`, newUser.value, { headers: getAuthHeader() })
     toast.success('添加成功')
     showAddModal.value = false
     newUser.value = { username: '', password: '', role: 'user' }

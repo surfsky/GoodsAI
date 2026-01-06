@@ -1,10 +1,9 @@
 <script setup>
 import { ref } from 'vue'
 import axios from 'axios'
-import { Upload, Camera, Search, AlertCircle, X, ChevronRight, Tag, Clock, DollarSign } from 'lucide-vue-next'
+import { Upload, Camera, Search, AlertCircle, X, ChevronRight, Tag, Clock, DollarSign, ZoomIn } from 'lucide-vue-next'
 import ProductDetailDrawer from '../components/ProductDetailDrawer.vue'
-
-const API_URL = 'http://localhost:8000'
+import { config } from '../config'
 
 const fileInput = ref(null)
 const previewUrl = ref(null)
@@ -33,7 +32,7 @@ const handleFileChange = async (event) => {
   formData.append('file', file)
 
   try {
-    const res = await axios.post(`${API_URL}/recognize`, formData, {
+    const res = await axios.post(`${config.API_URL}/recognize`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
     console.log("Recognize results:", res.data)
@@ -114,7 +113,7 @@ const viewProductDetail = (item) => {
         >
           <div class="w-20 h-20 bg-gray-100 rounded-md overflow-hidden flex-shrink-0">
             <img 
-              :src="`${API_URL}/${item.product.image_path}`" 
+              :src="`${config.API_URL}/${item.product.image_path}`" 
               class="w-full h-full object-cover"
             />
           </div>
@@ -139,17 +138,16 @@ const viewProductDetail = (item) => {
           
           <!-- Hover indicator -->
           <div class="absolute right-2 bottom-2 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">
-            <ChevronRight class="w-5 h-5" />
+            <ZoomIn class="w-5 h-5" />
           </div>
         </div>
       </div>
     </div>
 
       <ProductDetailDrawer 
-        v-if="showDetail"
         v-model:visible="showDetail"
         :product="currentProduct"
-        :api-url="API_URL"
+        :api-url="config.API_URL"
       />
   </div>
 </template>

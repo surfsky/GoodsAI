@@ -3,14 +3,18 @@ import numpy as np
 import os
 from datetime import datetime, timedelta
 import bcrypt
+import threading
 
-DB_PATH = "goods.db"
+# Get absolute path to the directory where this file is located
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "goods.db")
 
 # ------------------------------------------------------
 # Database Manager
 # ------------------------------------------------------
 class DBManager:
     def __init__(self):
+        self.lock = threading.Lock()
         self.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
         # Enable foreign keys for every connection
         self.conn.execute("PRAGMA foreign_keys = ON")
@@ -144,9 +148,20 @@ class DBManager:
                        (user_id, username, action, details, created_at))
         self.conn.commit()
 
-    def get_logs(self, limit=100):
+    def get_logs(self, limit=20, offset=0, search=None):
         cursor = self.conn.cursor()
-        cursor.execute("SELECT id, user_id, username, action, details, created_at FROM logs ORDER BY created_at DESC LIMIT ?", (limit,))
+        query = "SELECT id, user_id, username, action, details, created_at FROM logs"
+        params = []
+        
+        if search:
+            query += " WHERE username LIKE ? OR action LIKE ? OR details LIKE ?"
+            term = f"%{search}%"
+            params.extend([term, term, term])
+            
+        query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+        
+        cursor.execute(query, params)
         rows = cursor.fetchall()
         return [{"id": r[0], "user_id": r[1], "username": r[2], "action": r[3], "details": r[4], "created_at": r[5]} for r in rows]
 
@@ -298,40 +313,71 @@ class DBManager:
             return row[0]
         return None
 
-    def get_all_products(self):
-        """Get all products with their images"""
-        cursor = self.conn.cursor()
-        cursor.execute('''
-            SELECT p.id, p.model_name, p.product_name, p.price, p.maintenance_time, p.created_at,
-                   pi.id, pi.image_path, pi.display_order
-            FROM products p
-            LEFT JOIN product_images pi ON p.id = pi.product_id
-            ORDER BY p.id DESC, pi.display_order ASC, pi.id ASC
-        ''')
-        rows = cursor.fetchall()
-        
-        products_map = {}
-        for r in rows:
-            pid = r[0]
-            if pid not in products_map:
-                products_map[pid] = {
-                    "id": pid,
-                    "model_name": r[1],
-                    "product_name": r[2] or "",
-                    "price": r[3],
-                    "maintenance_time": r[4],
-                    "created_at": r[5],
-                    "images": []
-                }
+    def get_all_products(self, limit=20, offset=0, search=None):
+        """Get products with their images, supporting pagination and search"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                
+                # Base query for products
+                query = "SELECT id, model_name, product_name, price, maintenance_time, created_at FROM products"
+                params = []
+                
+                # Add search condition
+                if search:
+                    query += " WHERE model_name LIKE ? OR product_name LIKE ?"
+                    search_term = f"%{search}%"
+                    params.extend([search_term, search_term])
+                
+                # Add pagination
+                query += " ORDER BY id DESC LIMIT ? OFFSET ?"
+                params.extend([limit, offset])
+                
+                cursor.execute(query, params)
+                product_rows = cursor.fetchall()
+                
+                if not product_rows:
+                    return []
+                
+                products_map = {}
+                pids = []
+                for r in product_rows:
+                    pid = r[0]
+                    pids.append(pid)
+                    products_map[pid] = {
+                        "id": pid,
+                        "model_name": r[1],
+                        "product_name": r[2] or "",
+                        "price": r[3],
+                        "maintenance_time": r[4],
+                        "created_at": r[5],
+                        "images": []
+                    }
+                
+                # Fetch images for these products
+                placeholders = ','.join(['?'] * len(pids))
+                img_query = f'''
+                    SELECT product_id, id, image_path, display_order 
+                    FROM product_images 
+                    WHERE product_id IN ({placeholders})
+                    ORDER BY display_order ASC, id ASC
+                '''
+                cursor.execute(img_query, pids)
+                img_rows = cursor.fetchall()
+                
+                for r in img_rows:
+                    pid = r[0]
+                    if pid in products_map:
+                        products_map[pid]["images"].append({
+                            "id": r[1],
+                            "image_path": r[2],
+                            "display_order": r[3]
+                        })
             
-            if r[6]: # If has image
-                products_map[pid]["images"].append({
-                    "id": r[6],
-                    "image_path": r[7],
-                    "display_order": r[8]
-                })
-        
-        return list(products_map.values())
+            return list(products_map.values())
+        except Exception as e:
+            print(f"Error getting products: {e}")
+            return []
 
     def get_all_vectors(self):
         """Get all vectors for search"""

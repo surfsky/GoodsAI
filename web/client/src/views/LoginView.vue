@@ -5,6 +5,7 @@ import axios from 'axios'
 import { useToast } from '../composables/useToast'
 import { useAuth } from '../composables/useAuth'
 import SliderCaptcha from '../components/SliderCaptcha.vue'
+import { config } from '../config'
 
 const router = useRouter()
 const toast = useToast()
@@ -32,7 +33,7 @@ const handleLogin = async () => {
     formData.append('username', username.value)
     formData.append('password', password.value)
     
-    const res = await axios.post('http://localhost:8000/token', formData)
+    const res = await axios.post(`${config.API_URL}/token`, formData)
     
     const { access_token, role, username: user } = res.data
     

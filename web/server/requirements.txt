@@ -3,6 +3,8 @@ uvicorn
 python-multipart
 torch
 torchvision
-numpy
+numpy<2.0.0
 Pillow
 aiofiles
+python-jose[cryptography]
+bcrypt

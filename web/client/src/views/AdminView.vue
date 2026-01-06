@@ -1,12 +1,14 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import axios from 'axios'
-import { Plus, Upload, Trash2, Edit2, X, FileArchive, CheckSquare, Eye, Maximize2, ChevronLeft, ChevronRight, ArrowUpDown, Share2 } from 'lucide-vue-next'
+import { Plus, Upload, Trash2, Edit2, X, FileArchive, CheckSquare, Eye, Maximize2, ChevronLeft, ChevronRight, ArrowUpDown, Share2, Search, Loader2 } from 'lucide-vue-next'
 import { useToast } from '../composables/useToast'
 import { useMessageBox } from '../composables/useMessageBox'
 import ProductEditDrawer from '../components/ProductEditDrawer.vue'
+import SearchBar from '../components/SearchBar.vue'
+import { config } from '../config'
+import { useIntersectionObserver } from '@vueuse/core'
 
-const API_URL = 'http://localhost:8000'
 const toast = useToast()
 const messageBox = useMessageBox()
 
@@ -23,6 +25,14 @@ const currentImage = ref(null)
 const currentImageIndex = ref(0)
 const previewImageUrls = ref([]) 
 
+// Pagination & Search
+const page = ref(1)
+const pageSize = ref(20)
+const hasMore = ref(true)
+const searchQuery = ref('')
+const loadingMore = ref(false)
+const loadMoreTrigger = ref(null)
+
 // Drawer State
 const editDrawerVisible = ref(false)
 const editingProduct = ref(null)
@@ -34,6 +44,48 @@ const isSelectionMode = ref(false)
 // Sorting
 const sortType = ref('date_desc') // date_desc, date_asc, price_desc, price_asc, name_asc, name_desc
 const showSortMenu = ref(false)
+
+// Infinite Scroll
+useIntersectionObserver(
+  loadMoreTrigger,
+  ([{ isIntersecting }]) => {
+    if (isIntersecting && hasMore.value && !loading.value && !loadingMore.value) {
+      loadMore()
+    }
+  },
+)
+
+// Watch search query with debounce
+// Removed watcher as per user request for manual trigger
+// let searchTimeout
+// watch(searchQuery, (newVal) => {
+//   clearTimeout(searchTimeout)
+//   searchTimeout = setTimeout(() => {
+//     page.value = 1
+//     hasMore.value = true
+//     products.value = [] // Clear list on new search
+//     fetchProducts()
+//   }, 500)
+// })
+
+  const isAllSelected = computed(() => {
+    return products.value.length > 0 && products.value.every(item => selectedIds.value.includes(item.id))
+  })
+
+  const toggleSelectAll = () => {
+    if (isAllSelected.value) {
+      selectedIds.value = []
+    } else {
+      selectedIds.value = products.value.map(item => item.id)
+    }
+  }
+
+const handleSearch = () => {
+  page.value = 1
+  hasMore.value = true
+  products.value = []
+  fetchProducts()
+}
 
 const sortOptions = [
   { label: '日期 (新→旧)', value: 'date_desc' },
@@ -47,9 +99,22 @@ const sortOptions = [
 const handleSort = (type) => {
   sortType.value = type
   showSortMenu.value = false
-  sortProducts()
+  // For simplicity, we re-fetch when sorting changes or do client-side sort if data is small
+  // But with pagination, client-side sort only sorts current page. 
+  // Ideally backend should handle sort. For now let's keep client sort on loaded items
+  // OR reset and reload. Let's reset and reload to be correct.
+  page.value = 1
+  hasMore.value = true
+  products.value = []
+  fetchProducts()
 }
 
+// Helper to sort locally (if needed for mixed loaded data, though backend sort is better)
+// But since we are paginating by ID DESC in backend, frontend sort might be weird.
+// Let's assume for now we just rely on backend ID DESC (Date Desc) as default.
+// If user selects other sort, we should probably pass sort param to backend.
+// But database.py `get_all_products` hardcodes ORDER BY.
+// So client-side sort is only effective on loaded items.
 const sortProducts = () => {
   if (!products.value || products.value.length === 0) return
   
@@ -76,19 +141,59 @@ const sortProducts = () => {
 const batchFile = ref(null)
 const batchStatus = ref('')
 
-const fetchProducts = async () => {
-  loading.value = true
+const fetchProducts = async (isLoadMore = false) => {
+  if (isLoadMore) {
+    loadingMore.value = true
+  } else {
+    loading.value = true
+  }
+  
   try {
-    const res = await axios.get(`${API_URL}/products`)
-    products.value = res.data
-    sortProducts()
+    const offset = (page.value - 1) * pageSize.value
+    const params = {
+      limit: pageSize.value,
+      offset: offset,
+      search: searchQuery.value
+    }
+    
+    const res = await axios.get(`${config.API_URL}/products`, { params })
+    const newItems = res.data
+    
+    if (newItems.length < pageSize.value) {
+      hasMore.value = false
+    }
+    
+    if (isLoadMore) {
+      products.value = [...products.value, ...newItems]
+      page.value++
+    } else {
+      products.value = newItems
+      page.value = 2 // Next page
+    }
+    
+    // Client side sort (might be partial if not all data loaded)
+    // sortProducts() 
     selectedIds.value = []
   } catch (err) {
-    console.error(err)
-    toast.error('获取商品列表失败')
+    console.error("Fetch products error:", err)
+    if (err.response) {
+      console.error("Response data:", err.response.data)
+      console.error("Response status:", err.response.status)
+    } else if (err.request) {
+      console.error("No response received:", err.request)
+    } else {
+      console.error("Error setting up request:", err.message)
+    }
+    toast.error('获取商品列表失败: ' + (err.message || '未知错误'))
   } finally {
     loading.value = false
+    loadingMore.value = false
   }
+}
+
+const loadMore = () => {
+  if (loadingMore.value || !hasMore.value) return
+  fetchProducts(true)
 }
 
 const toggleSelectionMode = () => {
@@ -120,8 +225,11 @@ const batchDelete = async () => {
   if (!confirmed) return
   
   try {
-    const res = await axios.post(`${API_URL}/products/batch-delete`, { ids: selectedIds.value }, { headers: getAuthHeader() })
+    const res = await axios.post(`${config.API_URL}/products/batch-delete`, { ids: selectedIds.value }, { headers: getAuthHeader() })
     toast.success(`成功删除 ${res.data.count} 个商品`)
+    page.value = 1
+    products.value = []
+    hasMore.value = true
     fetchProducts()
     isSelectionMode.value = false
   } catch (err) {
@@ -139,8 +247,11 @@ const deleteProduct = async (id) => {
   if (!confirmed) return
   
   try {
-    await axios.delete(`${API_URL}/products/${id}`, { headers: getAuthHeader() })
+    await axios.delete(`${config.API_URL}/products/${id}`, { headers: getAuthHeader() })
     toast.success('删除成功')
+    page.value = 1
+    products.value = []
+    hasMore.value = true
     fetchProducts()
   } catch (err) {
     toast.error('删除失败')
@@ -162,7 +273,7 @@ const handleBatchUpload = async () => {
   uploadStatusText.value = '正在上传文件...'
   
   try {
-    const res = await axios.post(`${API_URL}/batch-update`, formData, {
+    const res = await axios.post(`${config.API_URL}/batch-update`, formData, {
       headers: getAuthHeader(),
       onUploadProgress: (progressEvent) => {
         const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total)
@@ -246,12 +357,33 @@ onUnmounted(() => {
     <div class="flex flex-col sm:flex-row justify-between gap-4 items-center">
       <div class="flex items-center space-x-4">
         <h2 class="text-xl font-bold text-gray-800">商品清单</h2>
-        <div v-if="isSelectionMode" class="flex items-center space-x-2 text-sm text-gray-600 bg-blue-50 px-3 py-1 rounded-full">
-           <span>已选择 {{ selectedIds.length }} 项</span>
+        <div v-if="isSelectionMode" class="flex items-center space-x-2 text-sm text-gray-600 bg-blue-50 px-3 py-1 rounded-full cursor-pointer hover:bg-blue-100 transition" @click="toggleSelectAll">
+           <div :class="['w-4 h-4 rounded border flex items-center justify-center transition-colors', isAllSelected ? 'bg-blue-600 border-blue-600' : 'border-gray-400 bg-white']">
+              <CheckSquare class="w-3 h-3 text-white" v-if="isAllSelected" />
+           </div>
+           <span>全选本页 (已选 {{ selectedIds.length }})</span>
         </div>
       </div>
       
-      <div class="flex space-x-2">
+      <div class="flex-1 w-full sm:w-auto flex items-center justify-end space-x-2">
+        <!-- Search Bar -->
+        <div class="w-full sm:w-64">
+          <SearchBar 
+            v-model="searchQuery" 
+            @search="handleSearch" 
+            placeholder="输入后按回车搜索..." 
+          />
+        </div>
+
+        <!-- Mobile Search Button -->
+        <button 
+           @click="handleSearch"
+           class="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition sm:hidden"
+           title="搜索"
+        >
+           <Search class="w-5 h-5" />
+        </button>
+
         <button 
           v-if="isSelectionMode"
           @click="batchDelete"
@@ -318,8 +450,9 @@ onUnmounted(() => {
     
     <div v-else class="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
       <div 
-        v-for="item in products" 
+        v-for="(item, index) in products" 
         :key="item.id"
+        :ref="index === products.length - 1 ? (el) => loadMoreTrigger = el : undefined"
         :class="['bg-white rounded-xl shadow-sm border overflow-hidden flex flex-col transition-all relative',
            selectedIds.includes(item.id) ? 'ring-2 ring-blue-500 border-blue-500' : 'border-gray-100']"
       >
@@ -330,8 +463,8 @@ onUnmounted(() => {
           @click="toggleSelection(item.id)"
         >
           <div class="absolute top-2 left-2">
-             <div :class="['w-6 h-6 rounded-md border-2 flex items-center justify-center bg-white',
-               selectedIds.includes(item.id) ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300 text-transparent']">
+             <div :class="['w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors',
+               selectedIds.includes(item.id) ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300 bg-white text-transparent']">
                <CheckSquare class="w-4 h-4" />
              </div>
           </div>
@@ -340,7 +473,7 @@ onUnmounted(() => {
         <div class="h-48 bg-gray-100 relative group">
           <img 
             v-if="item.images && item.images.length > 0" 
-            :src="`${API_URL}/${item.images[0].image_path}`" 
+            :src="`${config.API_URL}/${item.images[0].image_path}`" 
             class="w-full h-full object-cover" 
           />
           <div v-else class="w-full h-full flex items-center justify-center text-gray-400 bg-gray-50">
@@ -359,7 +492,7 @@ onUnmounted(() => {
 
           <!-- Share Button (Top Left) -->
           <button 
-            v-if="!isSelectionMode"
+            v-if="!isSelectionMode && !(editDrawerVisible && editingProduct?.id === item.id)"
             @click.stop="handleShare(item)" 
             class="absolute top-2 left-2 bg-blue-500 rounded-full text-white hover:bg-blue-600 transition-colors z-20 shadow-sm flex items-center justify-center w-6 h-6 opacity-0 group-hover:opacity-100"
             title="分享商品"
@@ -396,12 +529,24 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+    
+    <!-- Infinite Scroll Loading Indicator -->
+    <div v-if="loadingMore" class="flex justify-center py-6">
+      <div class="flex items-center space-x-2 text-gray-500">
+        <Loader2 class="w-5 h-5 animate-spin" />
+        <span>加载更多...</span>
+      </div>
+    </div>
+    
+    <div v-if="!loading && !hasMore && products.length > 0" class="text-center py-6 text-gray-400 text-sm">
+       没有更多商品了
+    </div>
 
     <!-- Edit Drawer -->
     <ProductEditDrawer 
       v-model:visible="editDrawerVisible"
       :product="editingProduct"
-      :api-url="API_URL"
+      :api-url="config.API_URL"
       @saved="fetchProducts"
     />
 

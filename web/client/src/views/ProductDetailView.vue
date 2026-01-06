@@ -3,12 +3,12 @@ import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import axios from 'axios'
 import { ChevronLeft, ChevronRight, Eye } from 'lucide-vue-next'
+import { config } from '../config'
 
 const route = useRoute()
 const product = ref(null)
 const loading = ref(true)
 const error = ref(null)
-const API_URL = 'http://localhost:8000'
 
 // Gallery state
 const currentImageIndex = ref(0)
@@ -16,7 +16,7 @@ const currentImageIndex = ref(0)
 const fetchProduct = async () => {
   loading.value = true
   try {
-    const res = await axios.get(`${API_URL}/products/${route.params.id}`)
+    const res = await axios.get(`${config.API_URL}/products/${route.params.id}`)
     product.value = res.data
     // Images are already sorted by backend
   } catch (err) {
@@ -58,7 +58,7 @@ onMounted(() => {
       <div class="md:w-1/2 bg-gray-100 relative group h-96 md:h-auto">
         <div v-if="product.images && product.images.length > 0" class="w-full h-full relative flex items-center justify-center bg-black">
            <img 
-             :src="`${API_URL}/${product.images[currentImageIndex].image_path}`" 
+             :src="`${config.API_URL}/${product.images[currentImageIndex].image_path}`" 
              class="max-w-full max-h-full object-contain"
            />
            

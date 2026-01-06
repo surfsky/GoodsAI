@@ -3,9 +3,9 @@ import { ref } from 'vue'
 import axios from 'axios'
 import { useToast } from '../composables/useToast'
 import { Lock, User } from 'lucide-vue-next'
+import { config } from '../config'
 
 const toast = useToast()
-const API_URL = 'http://localhost:8000'
 
 const oldPassword = ref('')
 const newPassword = ref('')
@@ -34,7 +34,7 @@ const handleChangePassword = async () => {
   loading.value = true
   try {
     await axios.post(
-      `${API_URL}/users/change-password`, 
+      `${config.API_URL}/users/change-password`, 
       {
         old_password: oldPassword.value,
         new_password: newPassword.value
