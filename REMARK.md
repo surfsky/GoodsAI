@@ -41,3 +41,20 @@ self.model.classifier = torch.nn.Identity()
 
 #### 方案 C：Python 微服务
 主服务器用 TypeScript 编写，AI 识别部分保留为独立的 Python 微服务，通过 HTTP 或子进程调用。
+
+### 3. 模型文件的管理与更新 (TypeScript Server)
+
+当前 TypeScript 版本使用 ONNX Runtime 加载 `.onnx` 模型文件。
+
+- **模型加载**：`model.ts` 中的 `FeatureExtractor` 类会在初始化时加载 `model.onnx` 文件。
+- **模型文件更新**：
+  - 如果需要更新模型（例如使用新的架构或重新训练），需要先在 Python 环境中导出新的 ONNX 模型。
+  - 项目提供了 `web/server/export_onnx.py` 脚本，运行该脚本会将 Python 版本的模型转换为 ONNX 格式并保存到 `web/serverTS/model.onnx`。
+- **特征向量更新**：
+  - 模型更新后，数据库中已存储的旧特征向量（基于旧模型提取）将失效，导致无法正确匹配。
+  - **必须**重新提取所有图片的特征向量。
+  - 项目提供了 `web/serverTS/refresh_features.ts` 脚本，用于遍历数据库中的所有图片，使用新模型重新计算特征向量并更新到数据库。
+  - **操作步骤**：
+    1. 替换 `model.onnx` 文件。
+    2. 运行 `npx ts-node refresh_features.ts`。
+    3. 重启 Server。

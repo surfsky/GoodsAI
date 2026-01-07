@@ -31,13 +31,19 @@
 ## 🛠 技术栈
 
 - **前端**：Vue 3, Vite, Tailwind CSS, Lucide Icons
-- **后端**：Python FastAPI, SQLite
+- **后端**：
+  - **Python (Default)**: FastAPI, SQLite, PyTorch/ONNX
+  - **Node.js (Alternative)**: Express, SQLite, ONNX Runtime
 - **AI 模型**：MobileNetV3 Small (ImageNet 预训练)，轻量级高效特征提取
 - **依赖库**：`torch`, `torchvision`, `Pillow`, `python-jose`, `passlib`, `bcrypt`
 
 ## 🚀 快速开始
 
 ### 1. 启动后端 (Server)
+
+您可以选择 Python 版本或 Node.js 版本。
+
+#### 选项 A: Python 后端 (端口 8000)
 
 建议使用 Python 虚拟环境 (venv39)。
 
@@ -52,8 +58,25 @@ source venv39/bin/activate
 # 2. 安装依赖
 pip install -r requirements.txt
 
-# 3. 启动服务 (默认端口 8000)
+# 3. 启动服务
 python main.py
+```
+
+#### 选项 B: Node.js 后端 (端口 3000)
+
+提供了更快的启动速度和 TypeScript 支持。
+
+```bash
+cd web/serverTS
+
+# 1. 安装依赖
+npm install
+
+# 2. 构建
+npm run build
+
+# 3. 启动服务
+npm start
 ```
 
 ### 2. 启动前端 (Client)
@@ -105,12 +128,16 @@ uploads.zip
 
 ```text
 web/
-├── server/          # 后端代码
+├── server/          # 后端代码 (Python)
 │   ├── main.py      # API 入口
 │   ├── database.py  # 数据库操作 (SQLite)
 │   ├── model.py     # AI 特征提取模型
 │   ├── goods.db     # SQLite 数据库文件
 │   └── uploads/     # 图片存储目录
+├── serverTS/        # 后端代码 (Node.js/TypeScript)
+│   ├── src/         # 源码
+│   ├── tests/       # 测试脚本
+│   └── dist/        # 编译后代码
 └── client/          # 前端代码
     ├── src/
     │   ├── views/   # 页面组件 (Home, Admin, Login...)

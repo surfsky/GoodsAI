@@ -31,7 +31,9 @@ const images = computed(() => {
 
 const currentImageUrl = computed(() => {
   if (images.value.length === 0) return ''
-  return `${props.apiUrl}/${images.value[currentImageIndex.value]}`
+  const img = images.value[currentImageIndex.value]
+  const path = typeof img === 'string' ? img : img.image_path
+  return `${props.apiUrl}/${path}`
 })
 
 // Reset index when product changes
